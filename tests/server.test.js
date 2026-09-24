@@ -8,6 +8,15 @@ const projectRoot = process.cwd();
 let serverProcess;
 
 before(async () => {
+  const { execFileSync, spawnSync } = await import('node:child_process');
+
+  if (process.platform === 'win32') {
+    const shell = process.env.ComSpec || 'cmd.exe';
+    spawnSync(shell, ['/d', '/s', '/c', 'npm', 'run', 'build'], { cwd: projectRoot, stdio: 'inherit' });
+  } else {
+    execFileSync('npm', ['run', 'build'], { cwd: projectRoot, stdio: 'inherit' });
+  }
+
   serverProcess = spawn(process.execPath, [path.join(projectRoot, 'server.js')], {
     cwd: projectRoot,
     stdio: 'inherit'
@@ -39,6 +48,26 @@ test('health endpoint responds successfully', async () => {
   const payload = await response.json();
   assert.equal(payload.status, 'ok');
   assert.equal(payload.app, 'JANSAHYOG');
+});
+
+test('frontend root is served with no-store cache headers', async () => {
+  const { existsSync } = await import('node:fs');
+  const { execFileSync, spawnSync } = await import('node:child_process');
+
+  const distIndex = path.join(projectRoot, 'dist', 'index.html');
+  if (!existsSync(distIndex)) {
+    if (process.platform === 'win32') {
+      const shell = process.env.ComSpec || 'cmd.exe';
+      spawnSync(shell, ['/d', '/s', '/c', 'npm', 'run', 'build'], { cwd: projectRoot, stdio: 'inherit' });
+    } else {
+      execFileSync('npm', ['run', 'build'], { cwd: projectRoot, stdio: 'inherit' });
+    }
+  }
+
+  const response = await fetch(`${BASE_URL}/`);
+  assert.equal(response.status, 200);
+  const cacheControl = response.headers.get('cache-control') || '';
+  assert.match(cacheControl, /no-store|no-cache/i);
 });
 
 test('demo citizen login works', async () => {
