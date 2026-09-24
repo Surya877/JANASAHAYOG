@@ -992,11 +992,20 @@ export default function App() {
             currentUser={currentUser}
             challenges={challenges}
             onSuccess={(newChallenge) => {
+              if (!newChallenge || !newChallenge.title || !newChallenge.problemBackground || !newChallenge.evidenceUrl) {
+                showToast('The submission is incomplete. Please finish the evidence and details first.');
+                return;
+              }
+
+              setSelectedChallenge(null);
               setChallenges(prev => [newChallenge, ...prev]);
               showToast('Problem submitted with TwoTensors 512-dim embedding & GPS!');
               setActiveTab('EXPLORE');
             }}
-            onCancel={() => setActiveTab('EXPLORE')}
+            onCancel={() => {
+              setSelectedChallenge(null);
+              setActiveTab('EXPLORE');
+            }}
           />
         )}
 
@@ -1706,11 +1715,20 @@ function CitizenProblemSubmissionView({ currentUser, challenges, onSuccess, onCa
 
   const handleSubmit = (e) => {
     e.preventDefault();
+
+    if (!currentUser || !currentUser.fullName) {
+      return;
+    }
+
     if (!isEvidenceReady || isBlockedByAi || isBlockedByDuplicate) return;
+
+    const cleanTitle = title.trim();
+    const cleanDescription = problemDescription.trim();
+    if (!cleanTitle || !cleanDescription) return;
 
     const newChallenge = {
       id: `CH-AP-${district.toUpperCase().slice(0, 3)}-${Date.now().toString().slice(-3)}`,
-      title: title.trim(),
+      title: cleanTitle,
       category,
       district,
       mandal,
@@ -1720,12 +1738,12 @@ function CitizenProblemSubmissionView({ currentUser, challenges, onSuccess, onCa
       submitterRole: currentUser.designation || 'Citizen Submitter',
       submittedAt: new Date().toISOString().replace('T', ' ').slice(0, 16),
       status: 'OPEN_FOR_SOLUTIONS',
-      problemBackground: problemDescription.trim(),
+      problemBackground: cleanDescription,
       evidenceUrl: mediaPreview || 'https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=800&q=80',
       evidenceType: mediaType,
       evidenceFilename: mediaFilename,
       tensorVectorId: `TT-VEC-${Date.now().toString().slice(-4)}`,
-      embedding512: computedVector || generateTensorEmbedding(title, 512),
+      embedding512: computedVector || generateTensorEmbedding(cleanTitle, 512),
       gps: gpsData,
       aiAudit: aiReport ? {
         aiProbability: aiReport.aiProbability,
