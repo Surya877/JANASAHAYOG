@@ -1372,13 +1372,18 @@ function CitizenProblemSubmissionView({ currentUser, challenges, onSuccess, onCa
   const openFilePicker = (mode = 'gallery') => {
     const input = fileInputRef.current;
     if (!input) return;
-    if (mode === 'camera') {
+
+    if (mode === 'photo') {
       input.setAttribute('capture', 'environment');
-      input.setAttribute('accept', 'image/*,video/*,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.bmp,.mp4,.mov,.m4v,.webm,.avi,.3gp');
+      input.setAttribute('accept', 'image/*,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.bmp');
+    } else if (mode === 'video') {
+      input.setAttribute('capture', 'environment');
+      input.setAttribute('accept', 'video/*,.mp4,.mov,.m4v,.webm,.avi,.3gp,.mkv');
     } else {
       input.removeAttribute('capture');
-      input.setAttribute('accept', 'image/*,video/*,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.bmp,.mp4,.mov,.m4v,.webm,.avi,.3gp');
+      input.setAttribute('accept', 'image/*,video/*,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.bmp,.mp4,.mov,.m4v,.webm,.avi,.3gp,.mkv');
     }
+
     input.click();
   };
 
@@ -1597,21 +1602,42 @@ function CitizenProblemSubmissionView({ currentUser, challenges, onSuccess, onCa
 
             {!mediaPreview ? (
               <div className="space-y-3">
-                <div
-                  onClick={() => openFilePicker('camera')}
-                  className="cursor-pointer border-2 border-dashed border-cyan-300 hover:border-cyan-500 bg-white rounded-lg p-6 text-center transition flex flex-col items-center justify-center gap-2 group"
-                >
-                  <div className="w-12 h-12 rounded-full bg-cyan-100 text-cyan-800 flex items-center justify-center group-hover:scale-105 transition">
-                    <Camera className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <span className="font-bold text-slate-800 block text-xs">
-                      Open Camera to Capture Evidence
-                    </span>
-                    <span className="text-[10px] text-slate-400 mt-0.5 block">
-                      This will open the device camera first for direct capture
-                    </span>
-                  </div>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openFilePicker('photo')}
+                    className="cursor-pointer border-2 border-dashed border-cyan-300 hover:border-cyan-500 bg-white rounded-lg p-4 text-center transition flex flex-col items-center justify-center gap-2 group"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-cyan-100 text-cyan-800 flex items-center justify-center group-hover:scale-105 transition">
+                      <Camera className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-slate-800 block text-xs">
+                        Take Photo
+                      </span>
+                      <span className="text-[10px] text-slate-400 mt-0.5 block">
+                        Open device camera directly
+                      </span>
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => openFilePicker('video')}
+                    className="cursor-pointer border-2 border-dashed border-violet-300 hover:border-violet-500 bg-white rounded-lg p-4 text-center transition flex flex-col items-center justify-center gap-2 group"
+                  >
+                    <div className="w-10 h-10 rounded-full bg-violet-100 text-violet-800 flex items-center justify-center group-hover:scale-105 transition">
+                      <Video className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <span className="font-bold text-slate-800 block text-xs">
+                        Record Video
+                      </span>
+                      <span className="text-[10px] text-slate-400 mt-0.5 block">
+                        Open video recorder directly
+                      </span>
+                    </div>
+                  </button>
                 </div>
 
                 <div className="flex items-center justify-center gap-2">
@@ -1621,7 +1647,7 @@ function CitizenProblemSubmissionView({ currentUser, challenges, onSuccess, onCa
                     className="px-3 py-2 bg-slate-900 hover:bg-slate-700 text-white text-[11px] font-bold rounded-lg flex items-center gap-2"
                   >
                     <Upload className="w-4 h-4" />
-                    Choose Photo/Video
+                    Choose from Gallery
                   </button>
                 </div>
               </div>
