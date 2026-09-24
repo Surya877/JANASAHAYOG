@@ -1,4 +1,9 @@
-const BASE = process.env.API_BASE || 'http://127.0.0.1:3001';
+export function resolveApiBase() {
+  if (typeof window !== 'undefined' && window.location && window.location.origin) {
+    return window.location.origin;
+  }
+  return process.env.API_BASE || 'http://127.0.0.1:3001';
+}
 
 function getToken() {
   try {
@@ -12,7 +17,8 @@ function getToken() {
 }
 
 async function apiFetch(path, opts = {}) {
-  const url = path.startsWith('http') ? path : `${BASE}${path}`;
+  const base = resolveApiBase();
+  const url = path.startsWith('http') ? path : `${base}${path}`;
   const headers = opts.headers ? { ...opts.headers } : {};
   const token = getToken();
   if (token) headers['Authorization'] = `Bearer ${token}`;

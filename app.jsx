@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { detectMediaType, createMediaPreview, revokeMediaPreview, detectLikelyCartoonOrIllustration, shouldBlockEvidence } from './mediaUpload';
+import { detectMediaType, createMediaPreview, revokeMediaPreview, detectLikelyCartoonOrIllustration, shouldBlockEvidence, getPriorityLevel, getPriorityScore, groupChallengesByArea, normalizePortalRole } from './mediaUpload';
 import apiClient from './apiClient';
 import { 
   Camera, 
@@ -423,6 +423,7 @@ export default function App() {
 
   // Real backend-backed auth for demo roles
   const handleFastDemoLogin = async (role) => {
+    const safeRole = normalizePortalRole(role);
     const roleProfiles = {
       CITIZEN: { email: 'v.ramanjaneyulu@guntur.org', phone: '9440123456' },
       STUDENT: { email: 'akhil.varma@andhrauniv.edu.in' },
@@ -431,14 +432,14 @@ export default function App() {
       ADMIN: { email: 'admin@jansahyog.in' }
     };
 
-    const payload = roleProfiles[role];
+    const payload = roleProfiles[safeRole];
     if (!payload) return;
 
     setAuthLoading(true);
     setAuthError('');
 
     try {
-      const res = await apiClient.post('/api/auth/login', { role, ...payload });
+      const res = await apiClient.post('/api/auth/login', { role: safeRole, ...payload });
       const user = await res.json();
       if (!res.ok) {
         throw new Error(user.error || 'Login failed');
@@ -726,12 +727,12 @@ export default function App() {
                 <button
                   key={role}
                   type="button"
-                  onClick={() => setSelectedRolePortal(role)}
+                  onClick={() => setSelectedRolePortal(normalizePortalRole(role))}
                   className={`py-2.5 px-3 rounded transition flex items-center justify-center gap-1.5 ${
-                    selectedRolePortal === role ? option.active : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
+                    selectedRolePortal === normalizePortalRole(role) ? option.active : 'text-slate-400 hover:text-white hover:bg-slate-800/60'
                   }`}
                 >
-                  <Icon className={`w-3.5 h-3.5 ${selectedRolePortal === role ? 'text-current' : 'text-slate-400'}`} />
+                  <Icon className={`w-3.5 h-3.5 ${selectedRolePortal === normalizePortalRole(role) ? 'text-current' : 'text-slate-400'}`} />
                   <span>{option.label}</span>
                 </button>
               );
@@ -743,10 +744,10 @@ export default function App() {
               <div>
                 <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded ${
                   selectedRolePortal === 'CITIZEN' ? 'bg-amber-100 text-amber-900' :
-                  selectedRolePortal === 'ACADEMIC' ? 'bg-blue-100 text-blue-900' : 'bg-emerald-100 text-emerald-900'
+                  selectedRolePortal === 'STUDENT' || selectedRolePortal === 'FACULTY' ? 'bg-blue-100 text-blue-900' : 'bg-emerald-100 text-emerald-900'
                 }`}>
                   {selectedRolePortal === 'CITIZEN' && 'Citizen & Rural Submissions'}
-                  {selectedRolePortal === 'ACADEMIC' && 'University Students & Faculty Researchers'}
+                  {(selectedRolePortal === 'STUDENT' || selectedRolePortal === 'FACULTY') && 'University Students & Faculty Researchers'}
                   {selectedRolePortal === 'INDUSTRY' && 'Corporate CSR & R&D Sponsors'}
                 </span>
                 <h2 className="text-base font-bold text-slate-900 mt-1">Portal Login</h2>
@@ -1158,7 +1159,7 @@ function CitizenProblemSubmissionView({ currentUser, challenges, onSuccess, onCa
     setAuthLoading(true);
     setAuthError('');
     try {
-      const payload = { fullName: regFullName, email: regEmail, phone: regPhone, password: regPassword, role: regRole };
+      const payload = { fullName: regFullName, email: regEmail, phone: regPhone, password: regPassword, role: normalizePortalRole(regRole) };
       const res = await apiClient.post('/api/auth/register', payload);
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || 'Registration failed');
@@ -1814,15 +1815,23 @@ function ChallengesFeedView({ challenges, currentUser, onSelectChallenge, onOpen
   const categories = ['All', 'Water Resources', 'Waste Management', 'Agriculture & Allied', 'Healthcare & Sanitation'];
 
   const filteredChallenges = useMemo(() => {
-    return challenges.filter(c => {
-      const matchSearch = searchTerm === '' ||
-        c.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.district.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        c.problemBackground.toLowerCase().includes(searchTerm.toLowerCase());
-      const matchCat = selectedCategory === 'All' || c.category === selectedCategory;
-      return matchSearch && matchCat;
-    });
+    return challenges
+      .filter(c => {
+        const matchSearch = searchTerm === '' ||
+          c.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          c.district.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          c.problemBackground.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchCat = selectedCategory === 'All' || c.category === selectedCategory;
+        return matchSearch && matchCat;
+      })
+      .sort((a, b) => {
+        const areaScoreA = groupChallengesByArea([a]).at(0)?.totalScore || 0;
+        const areaScoreB = groupChallengesByArea([b]).at(0)?.totalScore || 0;
+        return getPriorityScore(b) + areaScoreB - (getPriorityScore(a) + areaScoreA);
+      });
   }, [challenges, searchTerm, selectedCategory]);
+
+  const areaPrioritySummary = useMemo(() => groupChallengesByArea(challenges), [challenges]);
 
   return (
     <div className="space-y-6">
@@ -1880,6 +1889,17 @@ function ChallengesFeedView({ challenges, currentUser, onSelectChallenge, onOpen
         </div>
       </div>
 
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3">
+        {areaPrioritySummary.slice(0, 4).map(area => (
+          <div key={area.area} className={`border rounded p-3 ${area.priority.badgeClass}`}>
+            <div className="text-[10px] font-bold uppercase tracking-wider">Area Priority</div>
+            <div className="text-sm font-black mt-1">{area.area}</div>
+            <div className="text-[11px] font-semibold mt-1">{area.priority.level}</div>
+            <div className="text-[10px] mt-1 opacity-80">{area.challengeCount} reports • {area.dominantCategory}</div>
+          </div>
+        ))}
+      </div>
+
       {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {filteredChallenges.map(item => (
@@ -1895,6 +1915,9 @@ function ChallengesFeedView({ challenges, currentUser, onSelectChallenge, onOpen
                   </span>
                   <span className="text-[10px] font-bold bg-blue-100 text-blue-900 px-2 py-0.5 rounded border border-blue-200">
                     {item.district}, AP
+                  </span>
+                  <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded border ${getPriorityLevel(item).badgeClass}`}>
+                    {getPriorityLevel(item).level}
                   </span>
                   <span className="text-[10px] font-extrabold bg-cyan-100 text-cyan-900 px-2 py-0.5 rounded flex items-center gap-1 border border-cyan-300 font-mono">
                     <Binary className="w-3 h-3 text-cyan-700" />

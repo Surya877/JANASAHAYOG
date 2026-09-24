@@ -21,6 +21,75 @@ export const shouldBlockEvidence = ({ aiProbability = 0, duplicateSimilarity = 0
   return aiValue >= aiThreshold || duplicateValue >= duplicateThreshold;
 };
 
+export const normalizePortalRole = (role = 'CITIZEN') => {
+  const normalized = String(role || 'CITIZEN').trim().toUpperCase();
+
+  if (normalized === 'ACADEMIC') return 'STUDENT';
+  if (['CITIZEN', 'STUDENT', 'FACULTY', 'INDUSTRY', 'ADMIN'].includes(normalized)) return normalized;
+  return 'CITIZEN';
+};
+
+export const getPriorityScore = (challenge = {}) => {
+  const aiProbability = Number(challenge?.aiAudit?.aiProbability ?? challenge?.aiProbability ?? 0) || 0;
+  const upvotes = Number(challenge?.upvotes ?? 0) || 0;
+  const solutionsCount = Number(challenge?.solutionsCount ?? 0) || 0;
+  const urgency = Number(challenge?.urgency ?? 0) || 0;
+  return Math.round(aiProbability * 1.5 + upvotes * 1.2 + solutionsCount * 6 + urgency * 10);
+};
+
+export const getPriorityLevel = (challenge = {}) => {
+  const score = getPriorityScore(challenge);
+
+  if (score >= 120) {
+    return {
+      level: 'High Priority',
+      badgeClass: 'bg-rose-100 text-rose-800 border border-rose-300',
+      score
+    };
+  }
+
+  if (score >= 70) {
+    return {
+      level: 'Medium Priority',
+      badgeClass: 'bg-amber-100 text-amber-800 border border-amber-300',
+      score
+    };
+  }
+
+  return {
+    level: 'Low Priority',
+    badgeClass: 'bg-emerald-100 text-emerald-800 border border-emerald-300',
+    score
+  };
+};
+
+export const groupChallengesByArea = (challenges = []) => {
+  const map = new Map();
+
+  for (const challenge of challenges) {
+    const area = challenge?.district || 'Unknown Area';
+    const current = map.get(area) || { area, items: [], totalScore: 0 };
+    current.items.push(challenge);
+    current.totalScore += getPriorityScore(challenge);
+    map.set(area, current);
+  }
+
+  return [...map.values()]
+    .map((entry) => ({
+      ...entry,
+      priority: getPriorityLevel({
+        upvotes: entry.items.reduce((sum, item) => sum + Number(item?.upvotes || 0), 0),
+        solutionsCount: entry.items.reduce((sum, item) => sum + Number(item?.solutionsCount || 0), 0),
+        aiAudit: {
+          aiProbability: Math.max(...entry.items.map((item) => Number(item?.aiAudit?.aiProbability || item?.aiProbability || 0)), 0)
+        }
+      }),
+      challengeCount: entry.items.length,
+      dominantCategory: entry.items[0]?.category || 'General'
+    }))
+    .sort((a, b) => b.totalScore - a.totalScore);
+};
+
 export const detectLikelyCartoonOrIllustration = (file, imageElement = null) => {
   const name = (file?.name || '').toLowerCase();
   const suspiciousTokens = [
