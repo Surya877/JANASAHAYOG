@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { detectMediaType, createMediaPreview, revokeMediaPreview, detectLikelyCartoonOrIllustration, shouldBlockEvidence, getPriorityLevel, getPriorityScore, groupChallengesByArea, normalizePortalRole } from './mediaUpload';
+import { buildFallbackEvidenceAssessment } from './aiImageDetectionService';
 import apiClient from './apiClient';
 import { 
   Camera, 
@@ -942,6 +943,14 @@ export default function App() {
             >
               My Workspace
             </button>
+            <button 
+              onClick={() => setActiveTab('FORENSICS')} 
+              className={`px-3 py-1.5 rounded transition ${
+                activeTab === 'FORENSICS' ? 'text-[#0f2347] bg-slate-100 font-bold' : 'hover:text-slate-950 hover:bg-slate-50'
+              }`}
+            >
+              AI Forensics
+            </button>
           </nav>
 
           <div className="flex items-center gap-3">
@@ -989,6 +998,10 @@ export default function App() {
             }}
             onCancel={() => setActiveTab('EXPLORE')}
           />
+        )}
+
+        {activeTab === 'FORENSICS' && (
+          <AIForensicsStudioView currentUser={currentUser} />
         )}
 
         {/* VIEW 2: EXPLORE CHALLENGES */}
@@ -1067,6 +1080,270 @@ export default function App() {
         </div>
       </footer>
 
+    </div>
+  );
+}
+
+function AIForensicsStudioView({ currentUser }) {
+  const [selectedFile, setSelectedFile] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState('');
+  const [imageMeta, setImageMeta] = useState({ width: null, height: null, source: 'gallery', mimeType: '' });
+  const [analysis, setAnalysis] = useState(null);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [error, setError] = useState('');
+  const fileInputRef = useRef(null);
+
+  useEffect(() => {
+    return () => {
+      if (previewUrl && previewUrl.startsWith('blob:')) {
+        URL.revokeObjectURL(previewUrl);
+      }
+    };
+  }, [previewUrl]);
+
+  const handleFileSelect = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    if (previewUrl && previewUrl.startsWith('blob:')) {
+      URL.revokeObjectURL(previewUrl);
+    }
+
+    const nextPreview = URL.createObjectURL(file);
+    setPreviewUrl(nextPreview);
+    setSelectedFile(file);
+    setAnalysis(null);
+    setError('');
+
+    const meta = {
+      width: null,
+      height: null,
+      source: file.type.startsWith('image/') ? 'camera' : 'gallery',
+      mimeType: file.type || '',
+      hasExif: true,
+    };
+
+    if (file.type.startsWith('image/')) {
+      const img = new Image();
+      img.onload = () => {
+        setImageMeta({ ...meta, width: img.naturalWidth, height: img.naturalHeight });
+      };
+      img.src = nextPreview;
+      return;
+    }
+
+    setImageMeta(meta);
+  };
+
+  const runAnalysis = async () => {
+    if (!selectedFile) {
+      setError('Please choose an image or video to analyze first.');
+      return;
+    }
+
+    setIsAnalyzing(true);
+    setError('');
+
+    try {
+      const formData = new FormData();
+      formData.append('file', selectedFile);
+      formData.append('metadata', JSON.stringify({
+        ...imageMeta,
+        isCameraCapture: selectedFile.type.startsWith('image/'),
+        isGalleryUpload: true,
+        software: selectedFile.name || '',
+      }));
+
+      const response = await apiClient.fetch('/api/ai-image-detection/analyze', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const payload = await response.json();
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Analysis failed.');
+      }
+
+      setAnalysis(payload.analysis);
+    } catch (err) {
+      setError(err.message || 'Unable to analyze the submitted evidence.');
+    } finally {
+      setIsAnalyzing(false);
+    }
+  };
+
+  return (
+    <div className="w-full max-w-6xl mx-auto space-y-6">
+      <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] text-blue-900">
+              <ShieldCheck className="w-3.5 h-3.5" />
+              AI Image Detection / Image Forensics
+            </div>
+            <h2 className="mt-3 text-2xl font-black text-slate-900">Forensics Studio</h2>
+          </div>
+          <button
+            type="button"
+            onClick={() => setAnalysis(null)}
+            className="rounded-lg border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100"
+          >
+            Reset
+          </button>
+        </div>
+
+        <div className="grid gap-6 lg:grid-cols-[1.1fr_0.9fr]">
+          <div className="rounded-2xl border border-dashed border-slate-300 bg-slate-50 p-4">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*,video/*"
+              className="hidden"
+              onChange={handleFileSelect}
+            />
+
+            <div className="flex min-h-[280px] flex-col items-center justify-center rounded-2xl border-2 border-dashed border-slate-300 bg-white p-5 text-center">
+              {previewUrl ? (
+                <>
+                  {selectedFile?.type?.startsWith('video/') ? (
+                    <video src={previewUrl} controls className="max-h-64 w-full rounded-xl object-contain" />
+                  ) : (
+                    <img src={previewUrl} alt="Selected evidence" className="max-h-64 w-full rounded-xl object-contain" />
+                  )}
+                </>
+              ) : (
+                <>
+                  <div className="mb-4 rounded-full bg-blue-100 p-3 text-blue-700">
+                    <ScanLine className="h-7 w-7" />
+                  </div>
+                  <p className="text-sm font-bold text-slate-900">Drag in or select an image for forensic review</p>
+                  <p className="mt-2 max-w-md text-xs text-slate-500">
+                    The platform performs a privacy-safe metadata and artifact review without storing the evidence beyond the current session.
+                  </p>
+                </>
+              )}
+            </div>
+
+            <div className="mt-4 flex flex-wrap gap-3">
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="inline-flex items-center gap-2 rounded-xl bg-[#0f2347] px-4 py-2 text-xs font-bold text-white hover:bg-[#173766]"
+              >
+                <Upload className="h-4 w-4" />
+                Select Evidence
+              </button>
+              <button
+                type="button"
+                disabled={!selectedFile || isAnalyzing}
+                onClick={runAnalysis}
+                className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-55 hover:bg-emerald-700"
+              >
+                <Cpu className="h-4 w-4" />
+                {isAnalyzing ? 'Analyzing...' : 'Run AI Review'}
+              </button>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <h3 className="text-sm font-black uppercase tracking-[0.18em] text-slate-600">Evidence Summary</h3>
+
+            {selectedFile ? (
+              <div className="mt-4 space-y-3 text-xs text-slate-700">
+                <div className="flex items-center justify-between rounded-xl bg-white px-3 py-2 border border-slate-200">
+                  <span className="font-semibold">File</span>
+                  <span className="truncate max-w-[180px] text-right">{selectedFile.name}</span>
+                </div>
+                <div className="flex items-center justify-between rounded-xl bg-white px-3 py-2 border border-slate-200">
+                  <span className="font-semibold">Type</span>
+                  <span>{selectedFile.type || 'Unknown'}</span>
+                </div>
+                <div className="flex items-center justify-between rounded-xl bg-white px-3 py-2 border border-slate-200">
+                  <span className="font-semibold">Size</span>
+                  <span>{(selectedFile.size / 1024 / 1024).toFixed(2)} MB</span>
+                </div>
+                {imageMeta.width && imageMeta.height && (
+                  <div className="flex items-center justify-between rounded-xl bg-white px-3 py-2 border border-slate-200">
+                    <span className="font-semibold">Dimensions</span>
+                    <span>{imageMeta.width} × {imageMeta.height}</span>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <p className="mt-4 text-xs text-slate-500">Upload a file to review the metadata, risk signals, and authenticity score.</p>
+            )}
+
+            {error && (
+              <div className="mt-4 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-xs font-semibold text-rose-700">
+                {error}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {analysis && (
+        <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Result</div>
+              <h3 className="mt-1 text-xl font-black text-slate-900">{analysis.verdict.replace(/-/g, ' ')}</h3>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Confidence</div>
+              <div className="text-2xl font-black text-slate-900">{analysis.confidence}%</div>
+            </div>
+          </div>
+
+          <div className="mt-5 grid gap-4 md:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Risk level</div>
+              <div className="mt-2 text-lg font-black text-slate-900 uppercase">{analysis.riskLevel}</div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Probability</div>
+              <div className="mt-2 text-lg font-black text-slate-900">{analysis.probability * 100}%</div>
+            </div>
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Model</div>
+              <div className="mt-2 text-sm font-black text-slate-900">{analysis.model}</div>
+            </div>
+          </div>
+
+          <div className="mt-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+            <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Assessment</div>
+            <p className="mt-2 text-sm text-slate-700">{analysis.summary}</p>
+          </div>
+
+          <div className="mt-5 grid gap-4 lg:grid-cols-2">
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Findings</div>
+              <ul className="mt-3 space-y-2 text-xs text-slate-700">
+                {analysis.findings.map((finding, index) => (
+                  <li key={`${finding.label}-${index}`} className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="font-bold">{finding.label}</span>
+                      <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[9px] uppercase tracking-wider text-slate-700">{finding.severity}</span>
+                    </div>
+                    <p className="mt-1 text-[11px] text-slate-600">{finding.detail}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+              <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-500">Recommendations</div>
+              <ul className="mt-3 space-y-2 text-xs text-slate-700">
+                {analysis.recommendations.map((item, index) => (
+                  <li key={item} className="rounded-xl border border-slate-200 bg-white px-3 py-2">
+                    {index + 1}. {item}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1231,14 +1508,20 @@ function CitizenProblemSubmissionView({ currentUser, challenges, onSuccess, onCa
       };
       img.onerror = () => {
         const fallbackVector = generateTensorEmbedding(`${file.name}_${file.size}_unreadable`, 512);
+        const fallbackAssessment = buildFallbackEvidenceAssessment({
+          name: file.name,
+          type: file.type,
+          size: file.size,
+          source: 'camera',
+          software: 'Browser fallback for unreadable image',
+          artifactHints: ['image could not be decoded for pixel analysis']
+        });
         setComputedVector(fallbackVector);
         setDuplicateMatch(null);
         setAiReport({
-          aiProbability: 62.0,
-          isSynthetic: false,
-          authenticityScore: 38.0,
-          meanLaplacian: 0,
-          flags: ['Image could not be decoded for pixel forensics. The evidence is still accepted for manual review.'],
+          ...fallbackAssessment,
+          isSynthetic: fallbackAssessment.isSynthetic || !file.type || file.type.startsWith('image/'),
+          flags: fallbackAssessment.flags.length ? fallbackAssessment.flags : ['Image could not be decoded for pixel forensics. The evidence is still accepted for manual review.'],
           embedding512: fallbackVector
         });
         setIsScanning(false);

@@ -3,6 +3,7 @@ import cors from 'cors';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { analyzeImageForensics } from './aiImageDetectionService.js';
 // Optional runtime imports — loaded dynamically so server can run without
 // installing these packages when running quick tests locally.
 let dotenv;
@@ -203,6 +204,36 @@ try {
     const publicPath = `/uploads/${req.file.filename}`;
     res.status(201).json({ filename: req.file.filename, url: publicPath });
   });
+
+  app.post('/api/ai-image-detection/analyze', requireAuth, upload.single('file'), (req, res) => {
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+
+    let metadata = {};
+    if (req.body && req.body.metadata) {
+      try {
+        metadata = JSON.parse(req.body.metadata);
+      } catch (error) {
+        metadata = {};
+      }
+    }
+
+    const payload = {
+      fileName: req.file.originalname || req.file.filename,
+      mimeType: req.file.mimetype || metadata.mimeType || 'application/octet-stream',
+      fileSizeBytes: req.file.size,
+      width: Number(metadata.width || 0) || null,
+      height: Number(metadata.height || 0) || null,
+      hasExif: Boolean(metadata.hasExif),
+      software: metadata.software || '',
+      source: metadata.source || 'gallery',
+      isCameraCapture: Boolean(metadata.isCameraCapture),
+      isGalleryUpload: Boolean(metadata.isGalleryUpload),
+      artifactHints: Array.isArray(metadata.artifactHints) ? metadata.artifactHints : []
+    };
+
+    const result = analyzeImageForensics(payload);
+    return res.status(200).json({ ok: true, analysis: result, filename: req.file.filename, url: `/uploads/${req.file.filename}` });
+  });
   // Serve uploads statically
   app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 } catch (e) {
@@ -385,6 +416,7 @@ if (fs.existsSync(distPath)) {
         res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
         res.setHeader('Pragma', 'no-cache');
         res.setHeader('Expires', '0');
+        res.setHeader('Clear-Site-Data', '"cache", "storage"');
       }
     }
   }));
@@ -392,6 +424,8 @@ if (fs.existsSync(distPath)) {
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
+    res.setHeader('Clear-Site-Data', '"cache", "storage"');
+    res.setHeader('Vary', 'Origin');
     res.sendFile(path.join(distPath, 'index.html'));
   });
 }
