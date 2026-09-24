@@ -328,6 +328,23 @@ export default function App() {
   const [challengesTotal, setChallengesTotal] = useState(null);
   const [challengesLoading, setChallengesLoading] = useState(false);
 
+  const safeChallenges = useMemo(() => {
+    if (!Array.isArray(challenges)) return [];
+
+    return challenges
+      .filter(Boolean)
+      .map((challenge) => ({
+        ...challenge,
+        id: challenge.id || `CH-${Date.now()}-${Math.random().toString(16).slice(2, 7)}`,
+        title: String(challenge.title || 'Untitled citizen report').trim() || 'Untitled citizen report',
+        district: String(challenge.district || 'Unknown District').trim() || 'Unknown District',
+        category: String(challenge.category || 'General').trim() || 'General',
+        problemBackground: String(challenge.problemBackground || 'Citizen report submitted.').trim() || 'Citizen report submitted.',
+        submittedBy: String(challenge.submittedBy || 'Community Reporter').trim() || 'Community Reporter',
+        submitterRole: String(challenge.submitterRole || 'Citizen Submitter').trim() || 'Citizen Submitter'
+      }));
+  }, [challenges]);
+
   useEffect(() => {
     const loadSeedData = async () => {
       try {
@@ -990,7 +1007,7 @@ export default function App() {
         {activeTab === 'SUBMIT' && (
           <CitizenProblemSubmissionView 
             currentUser={currentUser}
-            challenges={challenges}
+            challenges={safeChallenges}
             onSuccess={(newChallenge) => {
               if (!newChallenge || !newChallenge.title || !newChallenge.problemBackground || !newChallenge.evidenceUrl) {
                 showToast('The submission is incomplete. Please finish the evidence and details first.');
@@ -998,7 +1015,10 @@ export default function App() {
               }
 
               setSelectedChallenge(null);
-              setChallenges(prev => [newChallenge, ...prev]);
+              setChallenges(prev => {
+                const normalizedPrev = Array.isArray(prev) ? prev.filter(Boolean) : [];
+                return [newChallenge, ...normalizedPrev];
+              });
               showToast('Problem submitted with TwoTensors 512-dim embedding & GPS!');
               setActiveTab('EXPLORE');
             }}
@@ -1017,7 +1037,7 @@ export default function App() {
         {activeTab === 'EXPLORE' && (
           <>
             <ChallengesFeedView 
-              challenges={challenges}
+              challenges={safeChallenges}
               currentUser={currentUser}
               onSelectChallenge={(ch) => setSelectedChallenge(ch)}
               onOpenSubmit={() => setActiveTab('SUBMIT')}
@@ -1042,9 +1062,9 @@ export default function App() {
         {activeTab === 'SOLUTIONS' && (
           <SolutionsDirectoryView 
             solutions={solutions}
-            challenges={challenges}
+            challenges={safeChallenges}
             onSelectChallenge={(chId) => {
-              const matched = challenges.find(c => c.id === chId);
+              const matched = safeChallenges.find(c => c.id === chId);
               if (matched) setSelectedChallenge(matched);
             }}
           />
@@ -1054,7 +1074,7 @@ export default function App() {
         {activeTab === 'DASHBOARD' && (
           <UserDashboardView 
             currentUser={currentUser}
-            challenges={challenges}
+            challenges={safeChallenges}
             solutions={solutions}
             onSelectChallenge={(ch) => setSelectedChallenge(ch)}
             onNavigate={(tab) => setActiveTab(tab)}
@@ -2178,11 +2198,16 @@ function ChallengesFeedView({ challenges, currentUser, onSelectChallenge, onOpen
   const filteredChallenges = useMemo(() => {
     return challenges
       .filter(c => {
+        const safeTitle = String(c?.title || '').trim();
+        const safeDistrict = String(c?.district || '').trim();
+        const safeBackground = String(c?.problemBackground || '').trim();
+        const safeCategory = String(c?.category || '').trim();
+
         const matchSearch = searchTerm === '' ||
-          c.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          c.district.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          c.problemBackground.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchCat = selectedCategory === 'All' || c.category === selectedCategory;
+          safeTitle.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          safeDistrict.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          safeBackground.toLowerCase().includes(searchTerm.toLowerCase());
+        const matchCat = selectedCategory === 'All' || safeCategory === selectedCategory;
         return matchSearch && matchCat;
       })
       .sort((a, b) => {
