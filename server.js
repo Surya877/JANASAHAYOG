@@ -369,6 +369,14 @@ app.get('/api/health', (req, res) => {
   res.json({ status: 'ok', app: 'JANSAHYOG', timestamp: new Date().toISOString() });
 });
 
+const distPath = path.join(__dirname, 'dist');
+if (fs.existsSync(distPath)) {
+  app.use(express.static(distPath));
+  app.get(/^(?!\/api(?:\/|$)).*/, (req, res) => {
+    res.sendFile(path.join(distPath, 'index.html'));
+  });
+}
+
 app.post('/api/auth/login', (req, res) => {
   const { role, email, phone, password } = req.body || {};
 
