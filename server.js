@@ -678,20 +678,18 @@ app.post('/api/solutions', async (req, res) => {
 // Initialize optional Mongo (non-blocking) and then start server
 (async () => {
   await initMongo();
-  // In production require critical env vars
+  // In production allow the app to run with the file-backed fallback store.
+  // MongoDB and a JWT secret are optional for a free deployment/demo mode.
   if (process.env.NODE_ENV === 'production') {
-    if (!MONGO_URI) {
-      console.error('MONGO_URI is required when NODE_ENV=production');
-      process.exit(1);
-    }
     if (!process.env.JWT_SECRET) {
-      console.error('JWT_SECRET is required when NODE_ENV=production');
-      process.exit(1);
+      process.env.JWT_SECRET = 'dev-secret';
+      console.warn('JWT_SECRET not set; using fallback for production demo mode.');
     }
     app.set('trust proxy', 1);
   }
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`JANSAHYOG backend running on http://0.0.0.0:${PORT}`);
     if (useMongo) console.log('MongoDB persistent store active.');
+    else console.log('File-backed store active (demo mode).');
   });
 })();
