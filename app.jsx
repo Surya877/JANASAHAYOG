@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
-import { detectMediaType, createMediaPreview, revokeMediaPreview, detectLikelyCartoonOrIllustration } from './mediaUpload';
+import { detectMediaType, createMediaPreview, revokeMediaPreview, detectLikelyCartoonOrIllustration, shouldBlockEvidence } from './mediaUpload';
 import apiClient from './apiClient';
 import { 
   Camera, 
@@ -165,9 +165,9 @@ const scanTwoTensorsForensics = async (fileOrBlob, imgElement) => {
       meanLaplacian = parseFloat((laplacianSum / count).toFixed(2));
       // Real mobile camera CMOS sensors have thermal ISO noise (meanLaplacian > 8.0)
       // Generative diffusion images exhibit mathematical sub-pixel smoothing (meanLaplacian < 4.2)
-      if (meanLaplacian < 4.2 && flags.length === 0) {
+      if (meanLaplacian < 2.6 && flags.length === 0) {
         flags.push('TwoTensors Vision Model: Synthetic low-frequency smoothing artifact detected');
-        aiProbability = Math.max(aiProbability, 89.6);
+        aiProbability = Math.max(aiProbability, 88.5);
         tensorSeed = 'twotensors_synthetic_smoothness_detected';
       }
     } catch (err) {
@@ -1210,7 +1210,7 @@ function CitizenProblemSubmissionView({ currentUser, challenges, onSuccess, onCa
             const similarity = computeCosineSimilarity(forensicResult.embedding512, ch.embedding512);
             if (similarity > maxCosine) {
               maxCosine = similarity;
-              if (similarity >= 0.90) {
+              if (similarity >= 0.97) {
                 highestMatch = {
                   matchedChallengeId: ch.id,
                   matchedTitle: ch.title,
@@ -1233,11 +1233,11 @@ function CitizenProblemSubmissionView({ currentUser, challenges, onSuccess, onCa
         setComputedVector(fallbackVector);
         setDuplicateMatch(null);
         setAiReport({
-          aiProbability: 85.1,
-          isSynthetic: true,
-          authenticityScore: 14.9,
+          aiProbability: 62.0,
+          isSynthetic: false,
+          authenticityScore: 38.0,
           meanLaplacian: 0,
-          flags: ['Image could not be decoded for pixel forensics. Evidence requires a readable camera image.'],
+          flags: ['Image could not be decoded for pixel forensics. The evidence is still accepted for manual review.'],
           embedding512: fallbackVector
         });
         setIsScanning(false);
@@ -1364,9 +1364,22 @@ function CitizenProblemSubmissionView({ currentUser, challenges, onSuccess, onCa
     });
   };
 
-  const isBlockedByAi = aiReport && aiReport.isSynthetic;
-  const isBlockedByDuplicate = Boolean(duplicateMatch);
+  const isBlockedByAi = shouldBlockEvidence({ aiProbability: aiReport?.aiProbability, duplicateSimilarity: duplicateMatch?.cosineSimilarity });
+  const isBlockedByDuplicate = Boolean(duplicateMatch && Number(duplicateMatch.cosineSimilarity || 0) >= 0.97);
   const isEvidenceReady = Boolean(mediaPreview && computedVector && aiReport && !isScanning);
+
+  const openFilePicker = (mode = 'gallery') => {
+    const input = fileInputRef.current;
+    if (!input) return;
+    if (mode === 'camera') {
+      input.setAttribute('capture', 'environment');
+      input.setAttribute('accept', 'image/*,video/*,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.bmp,.mp4,.mov,.m4v,.webm,.avi,.3gp');
+    } else {
+      input.removeAttribute('capture');
+      input.setAttribute('accept', 'image/*,video/*,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.bmp,.mp4,.mov,.m4v,.webm,.avi,.3gp');
+    }
+    input.click();
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
@@ -1576,27 +1589,39 @@ function CitizenProblemSubmissionView({ currentUser, challenges, onSuccess, onCa
             <input
               type="file"
               ref={fileInputRef}
-              accept="image/*,video/*"
-              capture="environment"
+              accept="image/*,video/*,.jpg,.jpeg,.png,.webp,.heic,.heif,.gif,.bmp,.mp4,.mov,.m4v,.webm,.avi,.3gp"
               onChange={(e) => e.target.files && processFile(e.target.files[0])}
               className="hidden"
             />
 
             {!mediaPreview ? (
-              <div
-                onClick={() => fileInputRef.current && fileInputRef.current.click()}
-                className="cursor-pointer border-2 border-dashed border-cyan-300 hover:border-cyan-500 bg-white rounded-lg p-6 text-center transition flex flex-col items-center justify-center gap-2 group"
-              >
-                <div className="w-12 h-12 rounded-full bg-cyan-100 text-cyan-800 flex items-center justify-center group-hover:scale-105 transition">
-                  <Camera className="w-6 h-6" />
+              <div className="space-y-3">
+                <div
+                  onClick={() => openFilePicker('camera')}
+                  className="cursor-pointer border-2 border-dashed border-cyan-300 hover:border-cyan-500 bg-white rounded-lg p-6 text-center transition flex flex-col items-center justify-center gap-2 group"
+                >
+                  <div className="w-12 h-12 rounded-full bg-cyan-100 text-cyan-800 flex items-center justify-center group-hover:scale-105 transition">
+                    <Camera className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-slate-800 block text-xs">
+                      Open Camera to Capture Evidence
+                    </span>
+                    <span className="text-[10px] text-slate-400 mt-0.5 block">
+                      This will open the device camera first for direct capture
+                    </span>
+                  </div>
                 </div>
-                <div>
-                  <span className="font-bold text-slate-800 block text-xs">
-                    Tap to Open Mobile Camera or Upload Evidence
-                  </span>
-                  <span className="text-[10px] text-slate-400 mt-0.5 block">
-                    TwoTensors.ai will infer 512-dim tensor vector on upload
-                  </span>
+
+                <div className="flex items-center justify-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => openFilePicker('gallery')}
+                    className="px-3 py-2 bg-slate-900 hover:bg-slate-700 text-white text-[11px] font-bold rounded-lg flex items-center gap-2"
+                  >
+                    <Upload className="w-4 h-4" />
+                    Choose Photo/Video
+                  </button>
                 </div>
               </div>
             ) : (

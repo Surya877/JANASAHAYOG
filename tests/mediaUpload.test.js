@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { detectMediaType, createMediaPreview, revokeMediaPreview, detectLikelyCartoonOrIllustration } from '../mediaUpload.js';
+import { detectMediaType, createMediaPreview, revokeMediaPreview, detectLikelyCartoonOrIllustration, shouldBlockEvidence } from '../mediaUpload.js';
 
 test('detectMediaType identifies video by file type', () => {
   const file = { type: 'video/mp4', name: 'sample.mp4' };
@@ -45,4 +45,10 @@ test('detectLikelyCartoonOrIllustration rejects character artwork names', () => 
   const result = detectLikelyCartoonOrIllustration({ name: 'mario_character_sheet.png' });
   assert.equal(result.suspicious, true);
   assert.match(result.reason, /character/i);
+});
+
+test('shouldBlockEvidence only blocks strong AI or near-duplicate matches', () => {
+  assert.equal(shouldBlockEvidence({ aiProbability: 10, duplicateSimilarity: 0.82 }), false);
+  assert.equal(shouldBlockEvidence({ aiProbability: 91, duplicateSimilarity: 0.2 }), true);
+  assert.equal(shouldBlockEvidence({ aiProbability: 10, duplicateSimilarity: 0.99 }), true);
 });

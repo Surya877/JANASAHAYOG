@@ -15,6 +15,12 @@ export const detectMediaType = (file) => {
   return 'image';
 };
 
+export const shouldBlockEvidence = ({ aiProbability = 0, duplicateSimilarity = 0, aiThreshold = 85, duplicateThreshold = 0.97 } = {}) => {
+  const aiValue = Number(aiProbability) || 0;
+  const duplicateValue = Number(duplicateSimilarity) || 0;
+  return aiValue >= aiThreshold || duplicateValue >= duplicateThreshold;
+};
+
 export const detectLikelyCartoonOrIllustration = (file, imageElement = null) => {
   const name = (file?.name || '').toLowerCase();
   const suspiciousTokens = [

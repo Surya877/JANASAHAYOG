@@ -187,9 +187,15 @@ try {
   app.post('/api/upload', requireAuth, upload.single('file'), (req, res) => {
     if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
     // Basic file type whitelist
-    const allowed = ['image/jpeg', 'image/png', 'image/webp', 'video/mp4', 'video/quicktime'];
-    const mimetype = req.file.mimetype || '';
-    if (!allowed.includes(mimetype)) {
+      const allowed = [
+      'image/jpeg', 'image/jpg', 'image/png', 'image/webp', 'image/gif', 'image/bmp', 'image/heic', 'image/heif', 'image/tiff',
+      'video/mp4', 'video/quicktime', 'video/x-msvideo', 'video/webm', 'video/3gpp', 'video/x-matroska', 'video/avi', 'video/mpeg'
+    ];
+    const mimetype = (req.file.mimetype || '').toLowerCase();
+    const originalName = (req.file.originalname || '').toLowerCase();
+    const allowedExt = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.heic', '.heif', '.tif', '.tiff', '.mp4', '.mov', '.m4v', '.webm', '.avi', '.3gp', '.mkv'];
+    const hasAllowedExt = allowedExt.some((ext) => originalName.endsWith(ext));
+    if (!allowed.includes(mimetype) && !hasAllowedExt) {
       try { fs.unlinkSync(path.join(uploadDir, req.file.filename)); } catch (e) {}
       return res.status(400).json({ error: 'Unsupported file type' });
     }
