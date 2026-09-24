@@ -1,0 +1,27 @@
+version: '3.8'
+services:
+  mongo:
+    image: mongo:6.0
+    restart: unless-stopped
+    volumes:
+      - mongodata:/data/db
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: root
+      MONGO_INITDB_ROOT_PASSWORD: example
+
+  app:
+    build: .
+    ports:
+      - "3001:3001"
+    environment:
+      MONGO_URI: mongodb://mongo:27017
+      MONGO_DB_NAME: jansahyog
+      JWT_SECRET: change-this-to-a-secure-random-string
+    depends_on:
+      - mongo
+    volumes:
+      - ./:/app
+      - ./uploads:/app/uploads
+
+volumes:
+  mongodata:
