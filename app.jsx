@@ -2451,10 +2451,13 @@ function SolutionsDirectoryView({ solutions, challenges, onSelectChallenge }) {
 
 
 function UserDashboardView({ currentUser, challenges, solutions, onSelectChallenge, onNavigate, onResetWorkspace }) {
-  const userChallenges = challenges.filter(c => 
-    c.submittedBy?.toLowerCase().includes(currentUser.fullName.toLowerCase()) || 
-    (currentUser.role === 'CITIZEN' && c.district === currentUser.district)
-  );
+  const userChallenges = challenges.filter(c => {
+    if (currentUser.role === 'CITIZEN') {
+      return c.submittedBy?.toLowerCase().includes(currentUser.fullName.toLowerCase()) || c.district === currentUser.district;
+    }
+
+    return true;
+  }).slice(0, 6);
 
   if (currentUser.role === 'ADMIN') {
     return (
@@ -2598,7 +2601,7 @@ function UserDashboardView({ currentUser, challenges, solutions, onSelectChallen
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <div className="bg-white border border-slate-200 rounded p-5 shadow-sm">
           <h3 className="font-bold text-slate-900 text-sm mb-3">
-            {currentUser.role === 'CITIZEN' ? 'My Reported Problems & TwoTensors Vectors' : currentUser.role === 'STUDENT' ? 'Active Capstones' : 'My Review Queue'}
+            {currentUser.role === 'CITIZEN' ? 'My Reported Problems & TwoTensors Vectors' : currentUser.role === 'STUDENT' ? 'Reported Problems & Active Capstones' : currentUser.role === 'FACULTY' ? 'Reported Problems & Mentor Review Queue' : currentUser.role === 'INDUSTRY' ? 'Reported Problems & CSR Review Queue' : 'My Review Queue'}
           </h3>
           <div className="space-y-3">
             {userChallenges.length > 0 ? userChallenges.map(c => (
